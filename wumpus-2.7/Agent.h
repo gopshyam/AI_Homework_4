@@ -3,11 +3,28 @@
 #ifndef AGENT_H
 #define AGENT_H
 
+#include "Location.h"
+#include "Orientation.h"
 #include "Action.h"
 #include "Percept.h"
 
 class Agent
 {
+private:
+    Action actionList[1000];
+    int numActions;
+    int safeLocations[100][100];
+    bool hasArrow;
+    bool wumpusKilled;
+    bool hasGold;
+    Location previousLocation;
+    Location currentLocation;
+    Orientation agentOrientation;
+
+    void updatePosition(Percept &percept);
+    void updateResultsOfPreviousAction(Percept &percept);
+    void updateSafety(Percept &percept);
+
 public:
 	Agent ();
 	~Agent ();
