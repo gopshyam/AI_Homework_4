@@ -14,9 +14,11 @@ private:
     Action actionList[1000];
     int numActions;
     int safeLocations[100][100];
+    bool backtrack;
     bool hasArrow;
     bool wumpusKilled;
     bool hasGold;
+    bool foundGold;
     Location previousLocation;
     Location currentLocation;
     Orientation agentOrientation;

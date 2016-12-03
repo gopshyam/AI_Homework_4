@@ -33,6 +33,7 @@ void Agent::Initialize ()
     srand((unsigned)time(0));
     //Initialize positions, arrays
     numActions = 0;
+    agentOrientation = RIGHT;
     currentLocation = Location(START_X, START_Y);
     previousLocation = Location(-1, -1);
     for (int i=0; i < 100; i++) {
@@ -40,6 +41,7 @@ void Agent::Initialize ()
             safeLocations[i][j] = 0;
         }
     }
+    safeLocations[START_X][START_Y] = SAFE;
 
 }
 
@@ -78,13 +80,14 @@ void Agent::updatePosition(Percept &percept) {
     if (numActions == 0) {
         return;
     }
-    Action prevAction = actionList[numActions];
-
+    Action prevAction = actionList[numActions - 1];
     if (prevAction == GOFORWARD) {
-        previousLocation = currentLocation;
         if (percept.Bump) {
             return;
         }
+
+        previousLocation = currentLocation;
+        backtrack = false;
         switch(agentOrientation){
             case RIGHT:
                 currentLocation.X++;
@@ -99,7 +102,7 @@ void Agent::updatePosition(Percept &percept) {
                 currentLocation.Y--;
                 break;
         }
-    return;
+        return;
     }
 
     if (prevAction == TURNLEFT) {
@@ -119,6 +122,24 @@ void Agent::updatePosition(Percept &percept) {
         }
         return;
     }
+
+    if (prevAction == TURNRIGHT) {
+        switch(agentOrientation) {
+            case RIGHT:
+                agentOrientation = DOWN;
+                break;
+            case UP:
+                agentOrientation = RIGHT;
+                break;
+            case LEFT:
+                agentOrientation = UP;
+                break;
+            case DOWN:
+                agentOrientation = LEFT;
+                break;
+        }
+        return;
+    }
 }
 
 
@@ -126,16 +147,22 @@ void Agent::updateResultsOfPreviousAction(Percept &percept){
     if (numActions == 0) {
         return;
     }
-    Action prevAction = actionList[numActions];
+    Action prevAction = actionList[numActions-1];
     if (prevAction == GRAB) {
         hasGold = true;
-    }
+        return;
+        }
     if (prevAction == SHOOT) {
+        //TODO: Update results so that if the Wumpus isn't killed, then all the squares which the agent is facing is are marked safe, and the current one is marked safe too
         hasArrow = false;
         if (percept.Scream) {
             wumpusKilled = true;
         } else {
             wumpusKilled = false;
+            //Mark the forward location as safe
+            Location nextLocation = getNextLocation(currentLocation, agentOrientation);
+            safeLocations[nextLocation.X][nextLocation.Y] = SAFE;
+            safeLocations[currentLocation.X][currentLocation.Y] = SAFE;
         }
     }
 }
@@ -148,24 +175,31 @@ void Agent::updateSafety(Percept &percept) {
         //RIGHT
         if (isValidLocation(x+1, y) && safeLocations[x+1][y] == UNKNOWN) {
             safeLocations[x+1][y] = UNSAFE;
+            if (percept.Stench && !wumpusKilled) {
+                safeLocations[x+1][y] = STENCH;
+            }
         }
         //UP
         if (isValidLocation(x, y+1) && safeLocations[x][y+1] == UNKNOWN) {
             safeLocations[x][y+1] = UNSAFE;
+            if (percept.Stench && !wumpusKilled) {
+                safeLocations[x][y+1] = STENCH;
+            }
         }
         //LEFT
         if (isValidLocation(x-1, y) && safeLocations[x-1][y] == UNKNOWN) {
             safeLocations[x-1][y] = UNSAFE;
+            if (percept.Stench && !wumpusKilled) {
+                safeLocations[x-1][y] = STENCH;
+            }
         }
         //DOWN
         if (isValidLocation(x, y-1) && safeLocations[x][y-1] == UNKNOWN) {
             safeLocations[x][y-1] == UNSAFE;
+            if (percept.Stench && !wumpusKilled) {
+                safeLocations[x][y-1] == STENCH;
+            }
         }
-
-        if (percept.Stench) {
-            safeLocations[x][y] == STENCH;
-        }
-
         return;
     } else {
         //If no dangerous percepts, then all adjacent squares must be safe
@@ -191,12 +225,12 @@ void Agent::updateSafety(Percept &percept) {
 
 Action Agent::Process (Percept& percept)
 {
-    int sdf;
-    cin >> sdf;
+
     //Update the position of the agent based on the percept.
     updatePosition(percept);
     updateResultsOfPreviousAction(percept);
     updateSafety(percept);
+
 	char c;
 	Action action;
 	bool validAction = true;
@@ -210,45 +244,81 @@ Action Agent::Process (Percept& percept)
     //      How is that done? Check if the action pool is maxed out
     //      Also check if there is no safe path to move.
 
-
-
+    
     //Pick a random action
     bool validMove = false;
     while(!validMove) {
         Action randomAction;
-        int randomIndex = rand() % 3;
-        cout << "ACTION " << randomIndex;
+        int randomIndex = rand() % 6;
         switch(randomIndex) {
             case 0:
-                randomAction = GOFORWARD;
-                break;
-            case 1:
                 randomAction = TURNLEFT;
                 break;
-            case 2:
+            case 1:
                 randomAction = TURNRIGHT;
                 break;
+            default:
+                randomAction = GOFORWARD;
         }
+        if (actionList[numActions-1] == TURNLEFT || actionList[numActions-1] == TURNRIGHT) {
+            randomAction == GOFORWARD;
+        }
+        
         if (randomAction == GOFORWARD) {
             Location nextLocation = getNextLocation(currentLocation, agentOrientation);
             if (isValidLocation(nextLocation) && safeLocations[nextLocation.X][nextLocation.Y] >= 0) {
                 action = randomAction;
                 validMove = true;
-            } else {
-                cout << "FORWARD MOVE FAILED";
             }
         } else {
             action = randomAction;
             validMove = true;
         }
+        if (actionList[numActions-1] == GOFORWARD && actionList[numActions-1] == GOFORWARD && randomAction == GOFORWARD) {
+            validMove = false;
+        }
     } 
     
+    //4-5. Stench and Breeze
+    if (percept.Breeze) {
+        backtrack = true;
+    }
 
-    //1. Check for gold
-    if (percept.Glitter) {
+    if (percept.Stench && hasArrow && !wumpusKilled) {
+        action = SHOOT;
+    }
+
+    if (backtrack) {
+        if (getNextLocation(currentLocation, agentOrientation) == previousLocation) {
+            action == GOFORWARD;
+        } else {
+            action == TURNRIGHT;
+        }
+    }
+
+
+    if (percept.Glitter && !hasGold) {
         action = GRAB;
+        hasGold = true;
     }
     
+    //Edge cases:
+    //If agent is at start position, and has the gold, the CLIMB out
+    if (currentLocation.X == START_X && currentLocation.Y == START_Y) {
+        if (percept.Stench){
+            if (hasArrow && !wumpusKilled) {
+                action = SHOOT;
+            }
+        }
+        if (hasGold) {
+            action = CLIMB;
+        }
+        if (percept.Breeze) {
+            //If agent detects a breeze in the start position, then GAME OVER       
+            action = CLIMB;
+        }
+    }
+
 
 	while (! validAction)
 	{
@@ -279,6 +349,8 @@ Action Agent::Process (Percept& percept)
 
 void Agent::GameOver (int score)
 {
-
+    if (!hasGold) {
+        cout <<"CANNOT SAFELY GET GOLD IN THIS CASE\n";
+    }
 }
 
